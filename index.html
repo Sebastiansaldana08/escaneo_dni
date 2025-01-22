@@ -3,13 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Escaneo Automático de DNI</title>
-    <script src="https://unpkg.com/@zxing/library@latest"></script> <!-- ZXing -->
+    <title>Escaneo Rápido de DNI</title>
     <style>
         body { font-family: Arial, sans-serif; text-align: center; background: #f8f9fa; margin: 0; padding: 20px; }
         h2 { color: #007bff; }
         video { width: 100%; max-width: 500px; margin-top: 10px; border: 2px solid #007bff; border-radius: 8px; }
-        canvas { display: none; } /* Ocultar el canvas donde analizamos el video */
         #resultado { margin-top: 15px; font-size: 20px; font-weight: bold; color: green; }
         #error { margin-top: 15px; font-size: 16px; color: red; font-weight: bold; }
     </style>
@@ -22,33 +20,53 @@
 
     <script>
         let lastScanned = ""; // Para evitar escaneos duplicados
+        let scanning = false;
 
         async function startScanner() {
             try {
-                const codeReader = new ZXing.BrowserQRCodeReader();
-                const videoElement = document.getElementById("scanner");
+                // 📌 **Verificar si el navegador soporta BarcodeDetector**
+                if (!('BarcodeDetector' in window)) {
+                    document.getElementById("error").innerText = "❌ Error: Tu navegador no soporta detección de QR.";
+                    return;
+                }
 
-                // 🚀 **Forzar uso de la cámara trasera**
-                const devices = await navigator.mediaDevices.enumerateDevices();
-                const videoDevices = devices.filter(device => device.kind === "videoinput");
+                const video = document.getElementById("scanner");
 
-                if (videoDevices.length === 0) throw new Error("No se detectaron cámaras.");
-
-                let rearCamera = videoDevices.find(device => device.label.toLowerCase().includes("back")) || videoDevices[0];
-
-                // **Configurar y abrir la cámara**
-                await codeReader.decodeFromVideoDevice(rearCamera.deviceId, videoElement, (result, err) => {
-                    if (result) {
-                        let codigo = result.text;
-
-                        // Evitar escaneo repetido del mismo código
-                        if (codigo !== lastScanned) {
-                            lastScanned = codigo;
-                            document.getElementById("resultado").innerText = "Código detectado: " + codigo;
-                            sendToGoogleSheets(codigo);
-                        }
-                    }
+                // 🚀 **Obtener acceso a la cámara trasera**
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: { facingMode: "environment", width: { ideal: 1280 }, height: { ideal: 720 } }
                 });
+
+                video.srcObject = stream;
+
+                // 📌 **Inicializar el detector de códigos de barras**
+                const barcodeDetector = new BarcodeDetector({ formats: ["qr_code"] });
+
+                // 📌 **Escaneo en tiempo real**
+                setInterval(async () => {
+                    if (!scanning) {
+                        scanning = true;
+                        try {
+                            const track = stream.getVideoTracks()[0];
+                            const imageCapture = new ImageCapture(track);
+                            const bitmap = await imageCapture.grabFrame();
+
+                            const barcodes = await barcodeDetector.detect(bitmap);
+                            if (barcodes.length > 0) {
+                                let codigo = barcodes[0].rawValue;
+
+                                if (codigo !== lastScanned) {
+                                    lastScanned = codigo;
+                                    document.getElementById("resultado").innerText = "Código detectado: " + codigo;
+                                    sendToGoogleSheets(codigo);
+                                }
+                            }
+                        } catch (error) {
+                            console.error("Error detectando código:", error);
+                        }
+                        scanning = false;
+                    }
+                }, 500); // 📌 **Escanea cada 500ms para máxima velocidad**
 
             } catch (error) {
                 console.error("Error de acceso a cámara:", error);
@@ -67,7 +85,7 @@
             .catch(error => console.error("❌ Error al enviar datos:", error));
         }
 
-        startScanner(); // Iniciar automáticamente sin presionar botones
+        startScanner(); // 📌 **Iniciar automáticamente sin presionar botones**
     </script>
 </body>
 </html>
