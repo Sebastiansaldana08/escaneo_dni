@@ -12,6 +12,13 @@
 
         async function startScanner() {
             try {
+                // 🚀 **Solicitar acceso manual a la cámara**
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: { facingMode: "environment" } // 📷 **Forzar uso de la cámara trasera**
+                });
+
+                document.getElementById("scanner").srcObject = stream; // Conectar video
+
                 // 🚀 **Configurar Quagga2**
                 Quagga.init({
                     inputStream: {
