@@ -4,12 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Escaneo Automático de DNI</title>
-    <script src="https://unpkg.com/pdf417-js/pdf417.min.js"></script> <!-- PDF417 Decoder -->
+    <script src="https://cdn.jsdelivr.net/npm/dynamsoft-barcode-reader@latest/dist/dbr.js"></script> <!-- Dynamsoft -->
     <style>
         body { font-family: Arial, sans-serif; text-align: center; background: #f8f9fa; margin: 0; padding: 20px; }
         h2 { color: #007bff; }
         video { width: 100%; max-width: 500px; margin-top: 10px; border: 2px solid #007bff; border-radius: 8px; }
-        canvas { display: none; } /* Ocultar el canvas donde analizamos el video */
         #resultado { margin-top: 15px; font-size: 20px; font-weight: bold; color: green; }
         #error { margin-top: 15px; font-size: 16px; color: red; font-weight: bold; }
     </style>
@@ -17,59 +16,38 @@
 <body>
     <h2>Escaneo Automático de DNI</h2>
     <video id="scanner" autoplay playsinline></video>
-    <canvas id="canvas"></canvas> <!-- Para analizar fotogramas del video -->
     <p id="resultado">Esperando escaneo...</p>
     <p id="error"></p>
 
     <script>
-        let lastScanned = ""; // Para evitar escaneos duplicados
+        let lastScanned = ""; // Para evitar duplicados
 
         async function startScanner() {
             try {
-                const video = document.getElementById("scanner");
-                const canvas = document.getElementById("canvas");
-                const ctx = canvas.getContext("2d");
-
-                // 🚀 **Forzar el uso de la cámara trasera con alta resolución**
-                const stream = await navigator.mediaDevices.getUserMedia({
-                    video: { facingMode: "environment", width: { ideal: 1920 }, height: { ideal: 1080 } }
-                });
-
-                video.srcObject = stream;
-
-                video.addEventListener("loadedmetadata", () => {
-                    canvas.width = video.videoWidth;
-                    canvas.height = video.videoHeight;
-                    scanPDF417(video, canvas, ctx); // Iniciar escaneo PDF417
-                });
-
-            } catch (error) {
-                console.error("Error de acceso a cámara:", error);
-                document.getElementById("error").innerText = `⚠️ Error: ${error.message}`;
-            }
-        }
-
-        function scanPDF417(video, canvas, ctx) {
-            setInterval(() => {
-                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-                const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                // 🚀 **Inicializar el lector de códigos de barras**
+                let scanner = await Dynamsoft.BarcodeScanner.createInstance();
                 
-                try {
-                    const decoded = PDF417.decode(imageData);
-                    if (decoded && decoded.length > 0) {
-                        let codigo = decoded[0].Value;
-                        
-                        // Evitar escaneo repetido del mismo código
+                scanner.setUIElement(document.getElementById("scanner")); // Conectar video
+                scanner.updateRuntimeSettings("speed"); // Priorizar velocidad
+                
+                scanner.onFrameRead = results => {
+                    for (let result of results) {
+                        let codigo = result.barcodeText;
+
                         if (codigo !== lastScanned) {
                             lastScanned = codigo;
                             document.getElementById("resultado").innerText = "Código detectado: " + codigo;
                             sendToGoogleSheets(codigo);
                         }
                     }
-                } catch (error) {
-                    console.warn("No se detectó PDF417 en este cuadro.");
-                }
-            }, 500); // Escanea cada 500ms para mejorar velocidad
+                };
+
+                await scanner.show(); // Activar escáner
+
+            } catch (error) {
+                console.error("Error al iniciar escáner:", error);
+                document.getElementById("error").innerText = `⚠️ Error: ${error.message}`;
+            }
         }
 
         function sendToGoogleSheets(codigo) {
