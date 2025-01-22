@@ -4,24 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Escaneo Automático de DNI</title>
-    <script src="https://unpkg.com/quagga2@latest"></script> <!-- Quagga2 -->
-    <style>
-        body { font-family: Arial, sans-serif; text-align: center; background: #f8f9fa; margin: 0; padding: 20px; }
-        h2 { color: #007bff; }
-        video { width: 100%; max-width: 500px; margin-top: 10px; border: 2px solid #007bff; border-radius: 8px; }
-        #resultado { margin-top: 15px; font-size: 20px; font-weight: bold; color: green; }
-        #error { margin-top: 15px; font-size: 16px; color: red; font-weight: bold; }
-    </style>
-</head>
-<body>
-    <h2>Escaneo Automático de DNI</h2>
-    <video id="scanner" autoplay playsinline></video>
-    <p id="resultado">Esperando escaneo...</p>
-    <p id="error"></p>
+    <script type="module">
+        import Quagga from "https://cdn.jsdelivr.net/npm/quagga2/+esm"; // ✅ Carga correcta de Quagga2
 
-    <script>
-        let lastScanned = ""; // Para evitar escaneos duplicados
-        let scanning = false; // Control de escaneo para evitar múltiples lecturas
+        let lastScanned = ""; // Evitar escaneos duplicados
+        let scanning = false; // Control de escaneo
 
         async function startScanner() {
             try {
@@ -34,7 +21,7 @@
                         constraints: {
                             width: 1280, 
                             height: 720, 
-                            facingMode: "environment" // 📷 **Usar cámara trasera**
+                            facingMode: "environment" // 📷 **Forzar cámara trasera**
                         }
                     },
                     decoder: {
@@ -42,8 +29,7 @@
                     },
                     locate: true,
                     numOfWorkers: 4, // ⚡ **Más hilos para detección rápida**
-                    frequency: 10, // 🚀 **Escanea 10 veces por segundo**
-                    locate: true
+                    frequency: 10 // 🚀 **Escanea 10 veces por segundo**
                 }, function(err) {
                     if (err) {
                         console.error("Error en Quagga:", err);
@@ -85,7 +71,21 @@
             .catch(error => console.error("❌ Error al enviar datos:", error));
         }
 
-        startScanner(); // 📌 **Iniciar automáticamente sin presionar botones**
+        document.addEventListener("DOMContentLoaded", startScanner); // 📌 **Iniciar escáner automáticamente**
     </script>
+
+    <style>
+        body { font-family: Arial, sans-serif; text-align: center; background: #f8f9fa; margin: 0; padding: 20px; }
+        h2 { color: #007bff; }
+        video { width: 100%; max-width: 500px; margin-top: 10px; border: 2px solid #007bff; border-radius: 8px; }
+        #resultado { margin-top: 15px; font-size: 20px; font-weight: bold; color: green; }
+        #error { margin-top: 15px; font-size: 16px; color: red; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <h2>Escaneo Automático de DNI</h2>
+    <video id="scanner" autoplay playsinline></video>
+    <p id="resultado">Esperando escaneo...</p>
+    <p id="error"></p>
 </body>
 </html>
