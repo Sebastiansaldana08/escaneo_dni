@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Escaneo Automático de DNI</title>
-    <script src="https://cdn.jsdelivr.net/npm/dynamsoft-barcode-reader@latest/dist/dbr.js"></script> <!-- Dynamsoft -->
+    <script src="https://unpkg.com/zbar.wasm@latest"></script> <!-- ZBar -->
     <style>
         body { font-family: Arial, sans-serif; text-align: center; background: #f8f9fa; margin: 0; padding: 20px; }
         h2 { color: #007bff; }
@@ -24,15 +24,26 @@
 
         async function startScanner() {
             try {
-                // 🚀 **Inicializar el lector de códigos de barras**
-                let scanner = await Dynamsoft.BarcodeScanner.createInstance();
-                
-                scanner.setUIElement(document.getElementById("scanner")); // Conectar video
-                scanner.updateRuntimeSettings("speed"); // Priorizar velocidad
-                
-                scanner.onFrameRead = results => {
-                    for (let result of results) {
-                        let codigo = result.barcodeText;
+                const video = document.getElementById("scanner");
+
+                // 🚀 **Forzar el uso de la cámara trasera con alta resolución**
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: { facingMode: "environment", width: { ideal: 1920 }, height: { ideal: 1080 } }
+                });
+
+                video.srcObject = stream;
+
+                const zbar = await ZBarWASM(); // Cargar ZBar
+                const track = stream.getVideoTracks()[0];
+                const imageCapture = new ImageCapture(track);
+
+                // 📌 **Escanear en tiempo real**
+                setInterval(async () => {
+                    const bitmap = await imageCapture.grabFrame();
+                    const barcodes = zbar.scanImage(bitmap);
+
+                    if (barcodes.length > 0) {
+                        let codigo = barcodes[0].data;
 
                         if (codigo !== lastScanned) {
                             lastScanned = codigo;
@@ -40,12 +51,10 @@
                             sendToGoogleSheets(codigo);
                         }
                     }
-                };
-
-                await scanner.show(); // Activar escáner
+                }, 500); // 📌 **Escanea cada 500ms para máxima velocidad**
 
             } catch (error) {
-                console.error("Error al iniciar escáner:", error);
+                console.error("Error de acceso a cámara:", error);
                 document.getElementById("error").innerText = `⚠️ Error: ${error.message}`;
             }
         }
