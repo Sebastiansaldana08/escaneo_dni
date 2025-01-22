@@ -4,11 +4,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Escaneo Automático de DNI</title>
-    <script src="https://unpkg.com/zbar.wasm@latest"></script> <!-- ZBar -->
+    <script src="https://unpkg.com/@zxing/library@latest"></script> <!-- ZXing WebAssembly -->
     <style>
         body { font-family: Arial, sans-serif; text-align: center; background: #f8f9fa; margin: 0; padding: 20px; }
         h2 { color: #007bff; }
         video { width: 100%; max-width: 500px; margin-top: 10px; border: 2px solid #007bff; border-radius: 8px; }
+        canvas { display: none; } /* Ocultar el canvas donde analizamos el video */
         #resultado { margin-top: 15px; font-size: 20px; font-weight: bold; color: green; }
         #error { margin-top: 15px; font-size: 16px; color: red; font-weight: bold; }
     </style>
@@ -24,34 +25,30 @@
 
         async function startScanner() {
             try {
-                const video = document.getElementById("scanner");
+                const codeReader = new ZXing.BrowserBarcodeReader(); // ZXing para escanear PDF417
+                const videoElement = document.getElementById("scanner");
 
-                // 🚀 **Forzar el uso de la cámara trasera con alta resolución**
-                const stream = await navigator.mediaDevices.getUserMedia({
-                    video: { facingMode: "environment", width: { ideal: 1920 }, height: { ideal: 1080 } }
-                });
+                // 🚀 **Forzar uso de la cámara trasera**
+                const devices = await navigator.mediaDevices.enumerateDevices();
+                const videoDevices = devices.filter(device => device.kind === "videoinput");
 
-                video.srcObject = stream;
+                if (videoDevices.length === 0) throw new Error("No se detectaron cámaras.");
 
-                const zbar = await ZBarWASM(); // Cargar ZBar
-                const track = stream.getVideoTracks()[0];
-                const imageCapture = new ImageCapture(track);
+                let rearCamera = videoDevices.find(device => device.label.toLowerCase().includes("back")) || videoDevices[0];
 
-                // 📌 **Escanear en tiempo real**
-                setInterval(async () => {
-                    const bitmap = await imageCapture.grabFrame();
-                    const barcodes = zbar.scanImage(bitmap);
+                // **Configurar y abrir la cámara**
+                await codeReader.decodeFromVideoDevice(rearCamera.deviceId, videoElement, (result, err) => {
+                    if (result) {
+                        let codigo = result.text;
 
-                    if (barcodes.length > 0) {
-                        let codigo = barcodes[0].data;
-
+                        // Evitar escaneo repetido del mismo código
                         if (codigo !== lastScanned) {
                             lastScanned = codigo;
                             document.getElementById("resultado").innerText = "Código detectado: " + codigo;
                             sendToGoogleSheets(codigo);
                         }
                     }
-                }, 500); // 📌 **Escanea cada 500ms para máxima velocidad**
+                });
 
             } catch (error) {
                 console.error("Error de acceso a cámara:", error);
