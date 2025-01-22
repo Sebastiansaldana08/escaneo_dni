@@ -1,4 +1,5 @@
 <<<<<<< HEAD
+<<<<<<< HEAD
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -95,3 +96,105 @@
     </script>
 </body>
 </html>
+=======
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Escaneo Rápido de DNI</title>
+    <script src="https://serratus.github.io/quaggaJS/examples/js/quagga.min.js"></script> <!-- QuaggaJS -->
+    <style>
+        body { font-family: Arial, sans-serif; text-align: center; background: #f8f9fa; margin: 0; padding: 20px; }
+        h2 { color: #007bff; }
+        video { width: 100%; max-width: 400px; margin-top: 10px; border: 2px solid #007bff; border-radius: 8px; }
+        #resultado { margin-top: 15px; font-size: 20px; font-weight: bold; color: green; }
+        #error { margin-top: 15px; font-size: 16px; color: red; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <h2>Escaneo Automático de DNI</h2>
+    <video id="scanner" autoplay playsinline></video>
+    <p id="resultado">Esperando escaneo...</p>
+    <p id="error"></p>
+
+    <script>
+        let scanning = false; // Para evitar múltiples envíos rápidos
+        let lastScanned = ""; // Para evitar duplicados
+
+        async function startScanner() {
+            try {
+                // 🔥 **Forzar uso de la cámara trasera**
+                const devices = await navigator.mediaDevices.enumerateDevices();
+                const videoDevices = devices.filter(device => device.kind === "videoinput");
+                
+                if (videoDevices.length === 0) throw new Error("No se detectaron cámaras.");
+
+                let rearCamera = videoDevices.find(device => device.label.toLowerCase().includes("back")) || videoDevices[0];
+
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: { deviceId: rearCamera.deviceId ? { exact: rearCamera.deviceId } : undefined }
+                });
+
+                document.getElementById("scanner").srcObject = stream;
+
+                // ✅ **Inicializa QuaggaJS con Code128 optimizado**
+                Quagga.init({
+                    inputStream: {
+                        name: "Live",
+                        type: "LiveStream",
+                        target: document.querySelector("#scanner"),
+                        constraints: { width: 640, height: 480 }
+                    },
+                    decoder: { readers: ["code_128_reader"] },
+                    locate: true,
+                    numOfWorkers: 4, // Usa más hilos para detección rápida
+                    frequency: 10, // Escanea 10 veces por segundo
+                    locate: true
+                }, function(err) {
+                    if (err) {
+                        console.error("Error en QuaggaJS:", err);
+                        document.getElementById("error").innerText = "Error al iniciar el escáner.";
+                        return;
+                    }
+                    Quagga.start();
+                });
+
+                // 📌 **Evento cuando Quagga detecta un código**
+                Quagga.onDetected(function(result) {
+                    let codigo = result.codeResult.code;
+                    
+                    // Evita múltiples envíos del mismo código
+                    if (!scanning && codigo !== lastScanned) {
+                        scanning = true;
+                        lastScanned = codigo;
+                        document.getElementById("resultado").innerText = "Código detectado: " + codigo;
+
+                        sendToGoogleSheets(codigo);
+                        
+                        setTimeout(() => scanning = false, 2000); // Previene detección duplicada
+                    }
+                });
+
+            } catch (error) {
+                console.error("Error de acceso a cámara:", error);
+                document.getElementById("error").innerText = `⚠️ Error: ${error.message}`;
+            }
+        }
+
+        function sendToGoogleSheets(codigo) {
+            fetch("https://script.google.com/a/macros/upch.pe/s/AKfycbxoXIcKzfoZoZiFVdYLjpl8qfsWjPLI8FuDAGatvetFcVhH5tydT22IBt-GEQHb1V6_Tg/exec", {
+                method: "POST",
+                body: JSON.stringify({ codigo: codigo }),
+                headers: { "Content-Type": "application/json" }
+            })
+            .then(response => response.json())
+            .then(data => alert("✅ Asistencia registrada: " + codigo))
+            .catch(error => console.error("❌ Error al enviar datos:", error));
+        }
+
+        startScanner(); // Iniciar automáticamente sin presionar botones
+    </script>
+</body>
+</html>
+>>>>>>> c628d84 (Mensaje del commit)
