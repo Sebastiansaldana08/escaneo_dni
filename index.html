@@ -4,12 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Escaneo Automático de DNI</title>
-    <script src="https://unpkg.com/@zxing/library@latest"></script> <!-- ZXing WebAssembly -->
+    <script src="https://unpkg.com/quagga2@latest"></script> <!-- Quagga2 -->
     <style>
         body { font-family: Arial, sans-serif; text-align: center; background: #f8f9fa; margin: 0; padding: 20px; }
         h2 { color: #007bff; }
         video { width: 100%; max-width: 500px; margin-top: 10px; border: 2px solid #007bff; border-radius: 8px; }
-        canvas { display: none; } /* Ocultar el canvas donde analizamos el video */
         #resultado { margin-top: 15px; font-size: 20px; font-weight: bold; color: green; }
         #error { margin-top: 15px; font-size: 16px; color: red; font-weight: bold; }
     </style>
@@ -21,32 +20,51 @@
     <p id="error"></p>
 
     <script>
-        let lastScanned = ""; // Para evitar duplicados
+        let lastScanned = ""; // Para evitar escaneos duplicados
+        let scanning = false; // Control de escaneo para evitar múltiples lecturas
 
         async function startScanner() {
             try {
-                const codeReader = new ZXing.BrowserBarcodeReader(); // ZXing para escanear PDF417
-                const videoElement = document.getElementById("scanner");
-
-                // 🚀 **Forzar uso de la cámara trasera**
-                const devices = await navigator.mediaDevices.enumerateDevices();
-                const videoDevices = devices.filter(device => device.kind === "videoinput");
-
-                if (videoDevices.length === 0) throw new Error("No se detectaron cámaras.");
-
-                let rearCamera = videoDevices.find(device => device.label.toLowerCase().includes("back")) || videoDevices[0];
-
-                // **Configurar y abrir la cámara**
-                await codeReader.decodeFromVideoDevice(rearCamera.deviceId, videoElement, (result, err) => {
-                    if (result) {
-                        let codigo = result.text;
-
-                        // Evitar escaneo repetido del mismo código
-                        if (codigo !== lastScanned) {
-                            lastScanned = codigo;
-                            document.getElementById("resultado").innerText = "Código detectado: " + codigo;
-                            sendToGoogleSheets(codigo);
+                // 🚀 **Configurar Quagga2**
+                Quagga.init({
+                    inputStream: {
+                        name: "Live",
+                        type: "LiveStream",
+                        target: document.querySelector("#scanner"),
+                        constraints: {
+                            width: 1280, 
+                            height: 720, 
+                            facingMode: "environment" // 📷 **Usar cámara trasera**
                         }
+                    },
+                    decoder: {
+                        readers: ["pdf417_reader"] // 📌 **Escaneo exclusivo de PDF417**
+                    },
+                    locate: true,
+                    numOfWorkers: 4, // ⚡ **Más hilos para detección rápida**
+                    frequency: 10, // 🚀 **Escanea 10 veces por segundo**
+                    locate: true
+                }, function(err) {
+                    if (err) {
+                        console.error("Error en Quagga:", err);
+                        document.getElementById("error").innerText = "Error al iniciar el escáner.";
+                        return;
+                    }
+                    Quagga.start();
+                });
+
+                // 📌 **Evento cuando detecta un código**
+                Quagga.onDetected(function(result) {
+                    let codigo = result.codeResult.code;
+                    
+                    if (!scanning && codigo !== lastScanned) {
+                        scanning = true;
+                        lastScanned = codigo;
+                        document.getElementById("resultado").innerText = "Código detectado: " + codigo;
+
+                        sendToGoogleSheets(codigo);
+                        
+                        setTimeout(() => scanning = false, 2000); // 📌 **Evitar detección duplicada**
                     }
                 });
 
