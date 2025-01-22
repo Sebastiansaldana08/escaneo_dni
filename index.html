@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Escaneo de DNI</title>
+    <script src="https://unpkg.com/@zxing/library@latest"></script> <!-- ZXing -->
+    <script src="https://serratus.github.io/quaggaJS/examples/js/quagga.min.js"></script> <!-- Quagga -->
+    <style>
+        body { font-family: Arial, sans-serif; text-align: center; margin: 0; padding: 20px; }
+        video { width: 100%; max-width: 400px; margin-top: 10px; border: 2px solid #007bff; border-radius: 8px; }
+        button { margin-top: 10px; padding: 12px 20px; font-size: 16px; background: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer; }
+        button:hover { background: #0056b3; }
+        #resultado { margin-top: 15px; font-size: 18px; font-weight: bold; color: green; }
+        #error { margin-top: 15px; font-size: 16px; color: red; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <h2>Escanear DNI</h2>
+    <video id="scanner" autoplay playsinline></video>
+    <p id="resultado">Esperando escaneo...</p>
+    <p id="error"></p>
+    <button onclick="startScanner()">Iniciar Escaneo</button>
+
+    <script>
+        let selectedDeviceId = null;
+        const codeReader = new ZXing.BrowserMultiFormatReader();
+
+        async function startScanner() {
+            try {
+                const devices = await navigator.mediaDevices.enumerateDevices();
+                const videoDevices = devices.filter(device => device.kind === "videoinput");
+
+                if (videoDevices.length === 0) {
+                    throw new Error("No se detectaron cámaras.");
+                }
+
+                selectedDeviceId = videoDevices.find(device => device.label.toLowerCase().includes("back"))?.deviceId || videoDevices[0].deviceId;
+
+                document.getElementById("resultado").innerText = "Escaneando...";
+
+                // **Iniciar escaneo con ZXing (QR y PDF417)**
+                codeReader.decodeFromInputVideoDevice(selectedDeviceId, "scanner").then(result => {
+                    document.getElementById("resultado").innerText = "Código: " + result.text;
+                    sendToGoogleSheets(result.text);
+                }).catch(err => {
+                    document.getElementById("error").innerText = "No se detectó código QR/PDF417.";
+                    console.error(err);
+                });
+
+                // **Inicializa QuaggaJS (Code39)**
+                Quagga.init({
+                    inputStream: {
+                        name: "Live",
+                        type: "LiveStream",
+                        target: document.querySelector("#scanner"),
+                        constraints: { width: 640, height: 480 }
+                    },
+                    decoder: { readers: ["code_39_reader", "code_128_reader"] },
+                    locate: true
+                }, function(err) {
+                    if (err) {
+                        console.error("Error en QuaggaJS:", err);
+                        document.getElementById("error").innerText = "Error al iniciar el escáner.";
+                        return;
+                    }
+                    Quagga.start();
+                });
+
+                // 📌 Evento cuando Quagga detecta un código (Code39 o Code128)
+                Quagga.onDetected(function(result) {
+                    let codigo = result.codeResult.code;
+                    document.getElementById("resultado").innerText = "Código: " + codigo;
+                    Quagga.stop(); // Detener escáner tras detectar código
+                    sendToGoogleSheets(codigo);
+                });
+
+            } catch (error) {
+                console.error("Error de acceso a cámara:", error);
+                document.getElementById("error").innerText = `⚠️ Error: ${error.message}`;
+            }
+        }
+
+        function sendToGoogleSheets(codigo) {
+            fetch("https://script.googleusercontent.com/a/macros/upch.pe/echo?user_content_key=GuNK4OvelTb9rfVGLbYT3dm-_-bJp4AdjNWoioiy4rutaNNKL29_SxpCa1ykpAHsvqWPZ6PHdNMa9FdERRf1QHnpW6lnUp6xm5_BxDlH2jW0nuo2oDemN9CCS2h10ox_nRPgeZU6HP_j88RanzpS9HYBoW_l6D47XUbFhSw7MG-Gu2t0bWO9l_YrMmkwNRObpg6PRFiiQ3RFL4v6CiFjaOtb8r_wxjYLG5he9uN2UJoMVMyTEllzBI0cZELEp6FyGGaU2pP6Ntk&lib=MBJyy7CfNo1MbfRutZ8nfggpIXO-UI0-i", {
+                method: "POST",
+                body: JSON.stringify({ codigo: codigo }),
+                headers: { "Content-Type": "application/json" }
+            })
+            .then(response => response.json())
+            .then(data => alert("✅ Asistencia registrada: " + codigo))
+            .catch(error => console.error("❌ Error al enviar datos:", error));
+        }
+    </script>
+</body>
+</html>
